@@ -1,0 +1,116 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package music;
+
+import java.sql.*;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.*;
+import java.util.Iterator;
+
+/**
+ *
+ * @author student
+ */
+public class User {
+
+    String user_id;
+    DB db = new DB();
+   // Connection con = db.getConnector();
+    Statement st;
+    ResultSet rs;
+    String query;
+    int nosongs;
+    int max_songs =148 ;//specify the maximum songs in the dataset
+    HashMap<String, Integer> rec_songs = new HashMap<String, Integer>();
+    RecSong[] rsongs=new RecSong[max_songs];
+    int rsongs_count=0;
+    
+    public User(String user_id) {
+        this.user_id = user_id;
+    }
+
+    public void setUserId(String uid) {
+        System.out.println("SetUser");
+        this.user_id = uid;
+    }
+
+    public String getUserId() {
+        return this.user_id;
+    }
+
+    public HashMap<String, Integer> getRec_songs() {
+        
+         System.out.println("get rec songs" + this.rec_songs);
+        return this.rec_songs;
+    }
+
+    public void setRec_songs(HashMap<String, Integer> rec_songs) {
+        
+       // System.out.println(" in sett rec songs");
+        this.rec_songs = rec_songs;
+       
+        //System.out.println("rec songs" + this.rec_songs);
+
+        
+    }
+
+    public int getNosongs() {
+        return nosongs;
+    }
+
+    public void setNosongs(int nosongs) {
+        this.nosongs = nosongs;
+    }
+
+    public RecSong[] getRsongs() {
+        return rsongs;
+    }
+
+    public void setRsongs(RecSong[] rsongs) {
+        this.rsongs = rsongs;
+    }
+
+    public int getRsongs_count() {
+        return rsongs_count;
+    }
+
+    public void setRsongs_count(int rsongs_count) {
+        this.rsongs_count = rsongs_count;
+    }
+    
+    public void addRecmSong(RecSong rs)
+    {
+        int flag=0;
+        
+        if(rsongs_count==0)
+        {
+            rsongs[rsongs_count]=new RecSong(rs.getSong_id(),rs.getScount());   
+            rsongs_count++;
+        }
+        else
+        {
+             for(int i=0;i<rsongs_count;i++)
+            {
+                if(rsongs[i].getSong_id().equalsIgnoreCase(rs.getSong_id()) && (rsongs[i].getScount()<rs.getScount()))
+                {
+                    rsongs[i].setScount(rs.getScount());
+                    flag=1;
+                }
+       
+            }
+             if(flag==0)
+             {
+                 rsongs[rsongs_count]=new RecSong(rs.getSong_id(),rs.getScount());   
+                 rsongs_count++;
+             }
+        }
+            
+     
+    }
+    
+
+    
+}

@@ -1,0 +1,89 @@
+package music;
+
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+// package music;
+
+/**
+ *
+ * @author student
+ */
+public class Cluster {
+ 
+   int cno;
+   int user_size=60;
+   int songs_size=148 ;
+   User[] users=new User[user_size];
+   int[] mean=new int[songs_size];
+   int nusers=0;//numberof users
+   Methods md=new Methods();
+   
+
+    public int getCno() {
+        return cno;
+    }
+
+    public void setCno(int cno) {
+        this.cno = cno;
+    }
+
+    public int[] getMean() {
+        return mean;
+    }
+
+    public void setMean(int[] mean) {
+        this.mean = mean;
+    }
+
+    public User[] getUsers() {
+        return users;
+    }
+
+    public void setUsers(User[] users) {
+        this.users = users;
+    }
+
+    public int getNusers() {
+        return nusers;
+    }
+
+    public void setNusers(int nusers) {
+        this.nusers = nusers;
+    }
+    
+   
+    public void calculateMean()
+    {
+        mean=new int[songs_size];//change size to no of songs
+        for(int i=0;i<nusers;i++)
+        {
+            //System.out.println("mean iteration "+i );
+            int[] tempusrow=new int[songs_size];
+            tempusrow=md.fetchUserSongs(users[i].getUserId());
+            for(int j=0;j<songs_size;j++)
+            {
+                //System.out.println("mean inner loop "+i );
+                mean[j]+=tempusrow[j];
+            }
+        }
+        
+        for(int i=0;i<songs_size;i++)
+        {
+            mean[i]/=nusers;
+        }
+    }
+    
+    public void addUserToCluster(User uid)
+    {
+        users[nusers]=new User(uid.getUserId());
+        nusers++ ;
+    }
+    
+    
+    
+    
+    
+    
+}

@@ -1,0 +1,623 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+//package music;
+
+import java.sql.*;
+import java.util.*;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+
+/**
+ *
+ * @author student
+ */
+public class Methods  {
+
+    final int usize =35;
+    final int ssize =30000;
+    final int  max_clusters = usize;
+    int  test_size =26;
+    static User[] users ;
+    static Song[] songs ;
+    double[][] user_songs ;
+    double omin = 0.0, omax = 1.0, nmin = 0.0, nmax = 1000, threshold =0.55 ;
+    DB db = new DB();
+    Connection con = db.getConnector();
+    Statement st;
+    ResultSet rs;
+   
+    static Cluster[] c;
+    int nc = 1;//number of clusters
+    private String[] recm;
+    private String[] rec_songs;
+
+    public User[] getUsers() {
+
+        try {
+		
+               users = new User[usize];
+               songs = new Song[ssize];
+               user_songs = new double[usize][ssize];
+               c = new Cluster[max_clusters];
+            
+            
+            st = con.createStatement();
+            String query = "SELECT distinct userid as uid FROM  songcount";
+            rs = st.executeQuery(query);
+            int i = 0;
+             //System.out.println("Entering Loop"+query);
+            while (rs.next()) {
+                users[i] = new User(rs.getString("uid"));
+               //System.out.println("iteration num "+i +"  "+ users[i].getUserId());
+                i++;
+
+            }
+
+        } catch (Exception e) {
+            System.out.println("user error: " + e.getMessage());
+
+        }
+        return users;
+    }
+
+    public Song[] getSongs() {
+        try {
+            st = con.createStatement();
+            String query = "SELECT distinct songid FROM songcount ";
+            rs = st.executeQuery(query);
+            int i = 0;
+            while (rs.next()) {
+                songs[i] = new Song(rs.getString("songid"));
+                // System.out.println("iteration num"+i + songs[i].getSongId());
+                //songs[i]=new StringBuffer(rs.getString("song_id"));
+                i++;
+            }
+
+        } catch (Exception e) {
+            System.out.println("songs errror : "+e.getMessage());
+        }
+        return songs;
+    }
+
+    public void generateUserSongMatrix() {
+
+      System.out.println("Satus : started generating usersong Matrix................");
+        for (int i = 0; i < users.length; i++) {
+            for (int j = 0; j < songs.length; j++) {
+                try {
+                    st = con.createStatement();
+                    String query = "SELECT count FROM songcount WHERE songid='" + songs[j].getSongId() + "'and userid= '" + users[i].getUserId() + "'";
+                    //System.out.println(query);
+                    rs = st.executeQuery(query);
+		System.out.println("Satus :  generating usersong Matrix in progress................");
+                    if (rs.next()) {
+                        user_songs[i][j] = rs.getInt("count");
+                    } else {
+                        user_songs[i][j] = 0;
+                    }
+                } catch (Exception e) {
+                    System.out.print("user song matrix error :"+e.getMessage());
+                }
+            }
+			System.out.println("Satus : completed generating usersong Matrix................");
+        }
+
+    }
+
+    public void displayUserSongMatrix() {
+        System.out.println();
+        System.out.print("\t");
+        for (int k = 0; k < songs.length; k++) 
+		{
+            System.out.print(songs[k]);
+        }
+
+        for (int i = 0; i < users.length; i++) {
+            System.out.print(users[i] + "\t");
+            for (int j = 0; j < songs.length; j++) {
+
+                System.out.print(user_songs[i][j] + "\t");
+            }
+            System.out.println();
+        }
+
+    }
+
+    public void storeUserSongMatrix() {
+        Statement st1;
+        try {
+            st1 = con.createStatement();
+            st1.executeUpdate("delete from user_songs");
+
+        } catch (SQLException ex) {
+            Logger.getLogger(Methods.class.getName()).log(Level.SEVERE, null, ex);
+        }
+
+
+        for (int i = 0; i < users.length; i++) {
+            for (int j = 0; j < songs.length; j++) {
+                try {
+                    st = con.createStatement();
+                    int val = st.executeUpdate("INSERT into user_songs VALUES('" + users[i].getUserId() + "','" + songs[j].getSongId() + "'," + user_songs[i][j] + ")");
+                } catch (SQLException ex) {
+                    Logger.getLogger(Methods.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            }
+        }
+
+
+    }
+
+    public int[] fetchUserSongs(String userid) {
+        int[] userid_songs = new int[ssize];
+
+        for (int j = 0; j < songs.length; j++) {
+            try {
+                st = con.createStatement();
+                String query = "SELECT scount as value FROM dataset10000 WHERE song_id='" + songs[j].getSongId() + "'and user_id= '" + userid + "'";
+
+                //System.out.println(query+"  iteration num " + j);
+                rs = st.executeQuery(query);
+                if (rs.next()) {
+                    userid_songs[j] = rs.getInt("value");
+                } else {
+                    userid_songs[j] = 0;
+                }
+            } catch (SQLException ex) {
+                System.out.print("userid song matrix");
+            }
+        }
+        return userid_songs;
+    }
+
+    public double coSimlarity(int[] a, int[] b) {
+        double numerator = 0, csimilarity;
+        double denominator, denominator_x = 0, denominator_y = 0;
+
+        for (int i = 0; i < a.length; i++) {
+            numerator += a[i] * b[i];
+            denominator_x += Math.pow(a[i], 2);
+            denominator_y += Math.pow(b[i], 2);
+        }
+        denominator = Math.sqrt(denominator_x) * Math.sqrt(denominator_y);
+
+        if (denominator == 0) {
+            csimilarity = 0;
+        } else {
+            csimilarity = numerator / denominator;
+        }
+
+        return csimilarity;
+
+    }
+
+    public double normalize(double data) {
+        double nvalue;
+
+        nvalue = (((data - omin) / (omax - omin)) * (nmax - nmin)) + nmin;
+
+        return nvalue;
+    }
+
+    public void createClusters() {
+        c[0] = new Cluster();
+        c[0].addUserToCluster(users[0]);
+        //System.out.println(users[0].getUserId());
+        c[0].setMean(fetchUserSongs(users[0].getUserId()));
+
+
+        for (int j = 1; j < users.length; j++) {
+            int[] temprow = fetchUserSongs(users[j].getUserId());
+            int flag = 0;
+
+            for (int k = 0; k < nc; k++) {
+                double s = coSimlarity(temprow, c[k].getMean());
+                double s1 = normalize(s);
+
+               // System.out.println("checking cluster num " + k + " for user num " + j + " similarity " + s1 +"  threshold =" + threshold );
+                if (s1 >= threshold) {
+                    c[k].addUserToCluster(users[j]);
+                    c[k].calculateMean();
+                    flag = 1;
+                    break;
+                }
+
+            }
+
+            if (flag == 0) {
+                c[nc] = new Cluster();
+
+                c[nc].addUserToCluster(users[j]);
+                c[nc].setMean(fetchUserSongs(users[j].getUserId()));
+                //System.out.println("cluster created");
+                nc++;
+            }
+        }
+
+    }
+
+    public void showClusters() {
+        System.out.println("\n");
+        System.out.println("Clusters data");
+        for (int i = 0; i < nc; i++) {
+            System.out.println("Cluster number" + i + "  users are  :");
+            User[] u = c[i].getUsers();
+            for (int j = 0; j < c[i].getNusers(); j++) {
+                System.out.println(u[j].getUserId());
+            }
+        }
+
+    }
+
+    public void recommendSongs() {
+        User[] testuser = new User[test_size];
+        int flag;
+        try {
+            st = con.createStatement();
+            st.executeUpdate("delete from recm_songs");
+            String query = "select distinct user_id from test10000_set";
+            rs = st.executeQuery(query);
+            int i = 0;
+            //System.out.println("Entering Loop");
+            while (rs.next()) {
+                testuser[i] = new User(rs.getString("user_id"));
+                //System.out.println("User Id : "+ users[i].getUserId());
+                i++;
+            }
+
+            for (int j = 0; j < i; j++) {
+                
+                int[] temprow = fetchUserSongs(testuser[j].getUserId());
+                flag = 0;
+
+                for (int k = 0; k < nc; k++) {
+                    double s = coSimlarity(temprow, c[k].getMean());
+
+                    double s1 = normalize(s);
+
+                    //System.out.println("checking cluster num " + k + " for test user num " + j +s1);
+                    if (s1 >= threshold) {
+                        flag = 1;
+                        break;
+                    }
+
+                }
+
+                if (flag == 0) {
+                    System.out.println("Recommended songs for user id" + testuser[j].getUserId());
+                    System.out.println("NO RECOMMENDED SONGS");
+
+                } else {
+                    
+                    HashMap<String, Integer> recsongs = new HashMap<String, Integer>();
+
+                    User[] clusterusers = c[flag].getUsers();
+                    int nousers = c[flag].getNusers();
+
+                    System.out.println("Recommended songs for user id" + testuser[j].getUserId());
+                    for (int l = 0; l < nousers; l++) {
+                        //System.out.println("Recommended songs for user id" + clusterusers[i].getUserId() + i);
+                        Song[] rsongs = new Song[ssize];
+                        rsongs = getTopSongs(clusterusers[l].getUserId());
+
+                        for (int k = 0; k < getNumberOfSongs(clusterusers[l].getUserId()); k++)
+                        {
+                            if (rsongs[k].getSongId() != null) 
+                            {
+                                
+                            //    System.out.println(rsongs[k].getSongId());
+                               if (recsongs.containsKey(rsongs[k].getSongId())) 
+                                {
+                                    if (recsongs.get(rsongs[k].getSongId()) < getScount(clusterusers[l].getUserId(), rsongs[k].getSongId()))
+                                    {
+                                        recsongs.remove(rsongs[k].getSongId());
+                                        recsongs.put(rsongs[k].getSongId(), getScount(clusterusers[l].getUserId(), rsongs[k].getSongId()));
+                                        //System.out.println("in rec if ");
+                                    }
+                                    
+                                } else {
+                                    recsongs.put(rsongs[k].getSongId(), getScount(clusterusers[l].getUserId(), rsongs[k].getSongId()));
+                                    System.out.println(rsongs[k].getSongId());
+                                } 
+                                
+                                //RecSong song=new RecSong(rsongs[k].getSongId(),getScount(rsongs[k].getSongId(),clusterusers[l].getUserId()));
+                                //testuser[j].addRecmSong(song);
+                               
+                                
+                                
+                                
+                            }
+                        }
+                    }
+                    
+                    Iterator it=recsongs.entrySet().iterator();
+                    
+                    while(it.hasNext())
+                    {
+                        Map.Entry entry = (Map.Entry) it.next();
+
+                        String key = (String)entry.getKey();
+
+                        Integer val = (Integer)entry.getValue();
+                        // System.out.println("key,val: " + key + "," + val);
+                        String query1 = "insert into recm_songs values ('"+testuser[j].getUserId()+"','"+key+"',"+val+")";
+                        st.executeUpdate(query1);
+                        
+                       // recsongs.remove(key);
+                        it.remove();
+                        
+                        
+                    }
+
+                    //testuser[j].setRec_songs(recsongs);
+                   
+
+                }
+
+            }
+
+        } catch (Exception e) {
+            System.out.println("test user error: " + e.getMessage());
+
+        }
+    }
+
+    public void showStats() {
+
+        User[] testuser = new User[test_size];
+        //HashMap<String, Integer> rec_songs = new HashMap<String, Integer>();
+        int max_rec=4;
+        double flag, m, n = 0, sum = 0;
+        double[][] p;
+        double[] ap;
+
+        try 
+        {
+            st = con.createStatement();
+            String query = "select distinct user_id from test10000_set";
+            rs = st.executeQuery(query);
+            int i = 0;
+            //System.out.println("Entering Loop");
+            while (rs.next()) 
+            {
+                
+                testuser[i] = new User(rs.getString("user_id"));
+                // System.out.println("User Id : "+ users[i].getUserId());
+                i++;
+                
+            }
+
+            p = new double[i][max_rec];
+            ap = new double[i];
+            for(int row=0;row<i;row++)
+            {
+                ap[row]=0;
+                for(int col=0;col<max_rec;col++)
+                {
+                    p[row][col]=0;
+                }
+            }
+            
+            
+            for (int j = 0; j < i; j++) 
+            {
+
+                System.out.println("user :" +  (j+1) );
+
+               String[] rec_songs=getRecommendedSongs(testuser[j].getUserId());
+                
+                //System.out.println("length is"+rec_songs.length+"user is "+testuser[j].getUserId());
+
+                if ( rec_songs==null) 
+                {
+                    System.out.println(" no songs " );
+                    continue;
+                } 
+                else 
+                {
+
+                    //ValueComparator bvc = new ValueComparator(rec_songs);
+                    //TreeMap<String, Integer> sorted_songs = new TreeMap<String, Integer>(bvc);
+                    //sorted_songs.putAll(rec_songs);
+
+                    //String[] s = sorted_songs.keySet().toArray(new String[sorted_songs.size()]);
+
+                    n = 0;
+
+                    for (int k = 1; k <= max_rec; k++) 
+                    {
+                        if(k>rec_songs.length)
+                        {
+                              break;
+                        }
+                        m = 0;
+                        
+                        //System.out.println("k"+k);
+                        for (int l = 0; l < k; l++) 
+                        {
+                            //System.out.println("l"+l);
+                            if(l>=rec_songs.length)
+                            {
+                                break;
+                            }
+                            if (getScount(testuser[j].getUserId(), rec_songs[l]) > 0) 
+                            {
+                                m++;
+                            }
+
+                        }
+                       // System.out.println("j="+j+"  k="+k+" m="+m);
+                        p[j][k-1] = m / k;
+                        n += p[j][k-1] * getScount(testuser[j].getUserId(), rec_songs[k - 1]);
+                        
+                        
+
+                    }
+
+                    ap[j] = n / max_rec;
+                    
+                    
+                    sum += ap[j];
+
+               
+
+                for (int x = 0; x < i; x++) {
+                    for (int y = 1; y <= max_rec; y++) {
+                        System.out.print(p[x][y-1]+" ");
+                    }
+                    System.out.println();
+                }
+
+                    System.out.println("Average precision is "+ap[j]);
+                }
+                 
+                 
+            }
+            double map = sum / i;
+
+                System.out.println("mean average precision is" + map);
+        } catch (Exception e) {
+            System.out.println("stats error");
+             e.printStackTrace();
+        }
+
+    }
+    
+    public Song[] getTopSongs(String user_id)
+    {
+        Song[] songs = new Song[ssize];
+        try {
+            st = con.createStatement();
+            String query = "select song_id from user_songs where scount>0 and user_id = '" + user_id + "'";
+            rs = st.executeQuery(query);
+            int i = 0;
+            //System.out.println("Entering Loop");
+            while (rs.next()) {
+                songs[i] = new Song(rs.getString("song_id"));
+                //System.out.println("iteration num"+i + users[i].getUserId());
+                i++;
+
+            }
+
+        } catch (Exception e) {
+            System.out.println("user top songs error: " + e.getMessage());
+
+        }
+        return songs;
+    }
+
+    public int getNumberOfSongs(String user_id) 
+    {
+        //Song[] songs=new Song[max_songs] ;
+        int count = 0;
+        try {
+            st = con.createStatement();
+            String query = "select count(song_id) as count  from user_songs where scount>0 and user_id = '" + user_id + "'";
+            rs = st.executeQuery(query);
+            int i = 0;
+            //System.out.println("Entering Loop");
+            if (rs.next()) {
+                count = rs.getInt("count");
+                //System.out.println("iteration num"+i + users[i].getUserId());
+                //i++;
+            }
+
+        } catch (Exception e) {
+            System.out.println("user noof songs error: " + e.getMessage());
+
+        }
+        return count;
+    }
+    
+    public int getScount(String user_id, String songid)
+    {
+        int count = 0;
+        try {
+            st = con.createStatement();
+            String query = "select scount as count  from dataset10000  where user_id = '" + user_id + "' and song_id='"+songid+"'";
+            
+           //System.out.println(query);
+            rs = st.executeQuery(query);
+            int i = 0;
+            //System.out.println("Entering Loop");
+            if (rs.next()) {
+                count = rs.getInt("count");
+                //System.out.println("iteration num"+i + users[i].getUserId());
+                //i++;
+            }
+
+        } catch (Exception e) {
+            System.out.println("user getscount error: " + e.getMessage());
+
+        }
+        return count;
+    }
+    
+    public String[] getRecommendedSongs(String user_id)
+    {
+        
+        
+        try {
+            
+            st = con.createStatement();
+            String cquery = "select count(distinct song_id) as count   from recm_songs  where user_id = '" + user_id + "' order by scount ";
+            
+            //System.out.println("in recommended songs"+cquery);
+            rs = st.executeQuery(cquery);
+            rs.next();
+            int c=rs.getInt("count");
+            
+            if(c>0)
+            {
+                String query = "select distinct song_id    from recm_songs  where user_id = '" + user_id + "' order by scount";
+                recm = new String[c];
+                rs=st.executeQuery(query);
+                int i = 0;
+                //System.out.println("Entering Loop in songs");
+                while(rs.next()) 
+                {
+                    recm[i]=rs.getString("song_id");
+                   // System.out.println("rec iteration num"+i );
+                    i++;
+                }
+            }
+            
+          return recm;
+            
+        } catch (Exception e) {
+            System.out.println("user recm songs error: " + e.getMessage());
+
+        }
+        return null;
+       
+        
+    }
+
+    
+}
+class ValueComparator implements Comparator<String> {
+
+    Map<String, Integer> base;
+
+    public ValueComparator(Map<String, Integer> base) {
+        this.base = base;
+    }
+
+    // Note: this comparator imposes orderings that are inconsistent with equals.    
+    @Override
+    public int compare(String a, String b) {
+        if (base.get(a) >= base.get(b)) {
+            return -1;
+        } else {
+            return 1;
+        } // returning 0 would merge keys
+    }
+}
